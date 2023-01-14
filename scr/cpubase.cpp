@@ -208,16 +208,17 @@ void Cpu ::StX16(ushort addr, ushort value){
 	*MemoryMap(addr + 1) = static_cast<char>(0x00ff & (value >> 8));	
 }
 
-void Cpu::StX(ushort addr, char value){
+int Cpu::StX(ushort addr, char value){
 	if (addr < 0x8000){
-		Crg->Mapper(addr, value);
-//		std::cout << +value << std::endl;
+		Crg->MBC(addr, value);
+		return 0;
 		
 	}else if (addr < 0xff00){
 		*MemoryMap(addr) = value;
+		return 0;
 		
 	}else{
-		IOReg(addr, value);
+		return IOReg(addr, value);
 	}
 }
 

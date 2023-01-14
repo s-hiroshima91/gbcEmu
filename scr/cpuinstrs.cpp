@@ -20,8 +20,7 @@ int Cpu::LdBCImm(){
 int Cpu::LdbcA(){
 	ushort addr;
 	addr = Byte1to2(registerB, registerC);
-	StX(addr, registerA);
-	return 0;
+	return StX(addr, registerA);
 }
 
 int Cpu::IncBC(){
@@ -93,8 +92,24 @@ int Cpu::RrcA(){
 
 /*0x10*/
 int Cpu::StopCpu(){
-	++registerPC;
-	return 0;
+	clockCounter = 0;
+	std::cout << "stop" << std::hex << registerPC << std::endl;
+//	++registerPC;
+	if (!CheckBit(ioReg[0x4d], 0)){
+		return 4;
+	}
+	
+	if (CheckBit(ioReg[0x4d], 7)){
+		doubleSpeed = 0;
+		ioReg[0x4d] = 0x00;
+		return 0;//16200;
+		
+	}else{
+		doubleSpeed = 1;
+		ioReg[0x4d] = 0x80;
+		return 0;//8400;
+		
+	}
 }
 
 int Cpu::LdDEImm(){
@@ -105,8 +120,7 @@ int Cpu::LdDEImm(){
 int Cpu::LddeA(){
 	ushort addr;
 	addr = Byte1to2(registerD, registerE);
-	StX(addr, registerA);
-	return 0;
+	return StX(addr, registerA);
 }
 
 int Cpu::IncDE(){
@@ -187,9 +201,10 @@ int Cpu::LdHLImm(){
 }
 
 int Cpu::LdhliA(){
-	StX(registerHL, registerA);
+	int counter;
+	counter = StX(registerHL, registerA);
 	++registerHL;
-	return 0;
+	return counter;
 }
 
 int Cpu::IncHL(){
@@ -321,9 +336,10 @@ int Cpu::LdSPImm(){
 }
 
 int Cpu::LdhldA(){
-	StX(registerHL, registerA);
+	int counter;
+	counter = StX(registerHL, registerA);
 	--registerHL;
-	return 0;
+	return counter;
 }
 
 int Cpu::IncSP(){
@@ -348,8 +364,7 @@ int Cpu::Dechl(){
 int Cpu::LdhlImm(){
 	char value;
 	value = Imm();
-	StX(registerHL, value);
-	return 0;
+	return StX(registerHL, value);
 }
 
 int Cpu::Scf(){
@@ -658,33 +673,27 @@ int Cpu::LdLA(){
 
 /*0x70*/
 int Cpu::LdhlB(){
-	StX(registerHL, registerB);
-	return 0;
+	return StX(registerHL, registerB);
 }
 
 int Cpu::LdhlC(){
-	StX(registerHL, registerC);
-	return 0;
+	return StX(registerHL, registerC);
 }
 
 int Cpu::LdhlD(){
-	StX(registerHL, registerD);
-	return 0;
+	return StX(registerHL, registerD);
 }
 
 int Cpu::LdhlE(){
-	StX(registerHL, registerE);
-	return 0;
+	return StX(registerHL, registerE);
 }
 
 int Cpu::LdhlH(){
-	StX(registerHL, static_cast<char>(registerHL >> 8));
-	return 0;
+	return StX(registerHL, static_cast<char>(registerHL >> 8));
 }
 
 int Cpu::LdhlL(){
-	StX(registerHL, static_cast<char>(registerHL));
-	return 0;
+	return StX(registerHL, static_cast<char>(registerHL));
 }
 
 int Cpu::Halt(){
@@ -714,8 +723,7 @@ int Cpu::Halt(){
 }
 
 int Cpu::LdhlA(){
-	StX(registerHL, registerA);
-	return 0;
+	return StX(registerHL, registerA);
 }
 
 int Cpu::LdAB(){
@@ -1323,8 +1331,7 @@ int Cpu::Rst18(){
 int Cpu::LdffImmA(){
 	ushort addr;
 	addr = static_cast<ushort>(Imm());
-	IOReg(addr, registerA);
-	return 0;
+	return IOReg(addr, registerA);
 }
 
 int Cpu::PopHL(){
@@ -1337,8 +1344,7 @@ int Cpu::PopHL(){
 int Cpu::LdffcA(){
 	ushort addr;
 	addr = static_cast<ushort>(registerC);
-	IOReg(addr, registerA);
-	return 0;
+	return IOReg(addr, registerA);
 }
 
 /*
@@ -1386,8 +1392,7 @@ int Cpu::JpHL(){
 }
 
 int Cpu::LdAbsA(){
-	StX(Abs(), registerA);
-	return 0;
+	return StX(Abs(), registerA);
 }
 
 /*0xeb, 0xec, 0xed
@@ -1450,7 +1455,7 @@ int Cpu::OrImm()
 int Cpu::Rst30()
 {
 	Push16(registerPC);
-	registerPC = 0x0010;
+	registerPC = 0x0030;
 	return 0;
 }
 

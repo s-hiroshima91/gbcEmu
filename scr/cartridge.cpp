@@ -11,6 +11,17 @@ Cartridge::Cartridge(std::string Name)
 	ReadRom();
 	ReadSaveDate();
 	
+	if ((mapper >= 0x1) && (mapper <= 0x3)){
+		mbc = &Cartridge::MBC1;
+		
+	}else if ((mapper >= 0x5) && (mapper <= 0x6)){
+		
+	}else if ((mapper >= 0x19) && (mapper <= 0x1e)){
+		mbc = &Cartridge::MBC5;
+		
+	}else{
+		mbc = nullptr;
+	}
 }
 
 void Cartridge::ReadHeader(){
@@ -20,9 +31,16 @@ void Cartridge::ReadHeader(){
 	path += ".gb";
 	
 	std::ifstream ifs(path, std::ios::in | std::ios::binary);
-	if (!ifs){
-		std::cout << "ファイルが開けませんでした。" << std::endl;
-		return;
+	if (!ifs){		
+		ifs.close();
+		ifs.clear();
+		path += "c";
+		ifs.open(path, std::ios::in | std::ios::binary);
+		
+		if (!ifs){
+			std::cout << "ファイルが開けませんでした。" << std::endl;
+			return;
+		}
 	}
 	
 	boot = new char[romBankSize];
@@ -59,10 +77,17 @@ void Cartridge::ReadRom(){
 	path += romName;
 	path += ".gb";
 	
-	std::ifstream ifs(path, std::ios::in | std::ios::binary);
+	std::ifstream ifs;
+	ifs.open(path, std::ios::in | std::ios::binary);
 	if (!ifs){
-		std::cout << "ファイルが開けませんでした。" << std::endl;
-		return;
+		ifs.close();
+		ifs.clear();
+		path += "c";
+		ifs.open(path, std::ios::in | std::ios::binary);
+		if (!ifs){
+			std::cout << "ファイルが開けませんでした。" << std::endl;
+			return;
+		}
 	}
 	
 	rom = new char[romBankSize * (romSize + 1)];
@@ -89,7 +114,7 @@ void Cartridge::ReadSaveDate(){
 	ifs.close();
 }
 
-void Cartridge::WriteSaveDate(char *sRam){
+void Cartridge::WriteSaveDate(){
 	std::string path = "./save/";
 	
 	path += romName;
@@ -99,18 +124,80 @@ void Cartridge::WriteSaveDate(char *sRam){
 	if (!ofs){
 		std::cout << "セーブデータを新たに作成します。" << std::endl;
 	}
-	ofs.write(sRam, ramBankSize * (ramSize + 1));
+	ofs.write(ram, ramBankSize * (ramSize + 1));
 	ofs.close();
 
 }
 
-void Cartridge::Mapper(ushort addr, char value){
+void Cartridge::MBC(ushort addr, char value){
+	if(mbc == nullptr){
+		return;
+	}
+	(this->*mbc)(addr, value);
+}
+
+void Cartridge::MBC1(ushort addr, char value){
 
 	if (addr < 0x2000){
 		
 	}else if (addr < 0x4000){
-		Cpu->rom2 = rom + (value & romSize) * romBankSize;
+		value = value & 0x1f & romSize;
+		if (value == 0){
+			value = 1;
+		}
+		romBankNum &= 0x20;
+		romBankNum |= static_cast<int>(value);
+		Cpu->rom2 = rom + romBankNum * romBankSize;
+		
+	}else if (addr < 0x6000){
+		if (romSize < 0x20){
+			ramBankNum = static_cast<int>(value) & ramSize;
+			if (!mode0){
+				Cpu->sRam = ram + ramBankNum * ramBankSize;
+			}
+		}else{
+			romBankNum &= 0x1f;
+			romBankNum |= static_cast<int>(value & 0x11) << 5;
+			if (!mode0){
+				Cpu->rom1 = rom + (romBankNum & 0x20) * romBankSize;
+			}else{
+				Cpu->rom1 = rom + (romBankNum & 0x20) * romBankSize;
+			}
+		}
+
+	}else if (addr < 0x8000){
+		if ((value & 0x01) == 0){
+			mode0 = true;
+			
+		}else if ((value & 0x01) == 1){
+			mode0 = false;
+			if (romSize < 0x20){
+				Cpu->sRam = ram + romBankNum * ramBankSize;
+			}
+		}
 	}
+	return;
+}
+
+void Cartridge::MBC5(ushort addr, char value){
+	if (addr < 0x2000){
+		
+	}else if (addr < 0x3000){
+		romBankNum &= 0xff00;
+		romBankNum |= static_cast<int>(value) & 0xff;
+		romBankNum &= romSize;
+		Cpu->rom2 = rom + romBankNum * romBankSize;
+		
+	}else if (addr < 0x4000){
+		romBankNum &= 0x00ff;
+		romBankNum |= static_cast<int>(value) << 8;
+		romBankNum &= romSize;
+		Cpu->rom2 = rom + romBankNum * romBankSize;
+		
+	}else if (addr < 0x6000){
+		Cpu->sRam = ram + (value & ramSize) * ramBankSize;
+	}
+	
 	return;
 }
 

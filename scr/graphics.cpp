@@ -1,7 +1,52 @@
 #include "graphics.hpp"
 #include <iostream>
 
-Graphics::Graphics(char *vRam, char *ioReg, char *OAM){
+inline void Image(char *img, char *ram, char attr, char palette, int sprite, int delta, char priority){
+	char table1, table2;
+	char temp;
+	
+	temp = ((attr & 0x07) << 2) | (sprite & 0x20);
+	temp |= CheckBitFF(attr, 4) & 0x04;
+	sprite &= 0x1f;
+	if (CheckBit(attr, 3)){
+		ram += 0x2000;
+	}
+	
+	if (CheckBit(attr, 6)){
+		ram += ((sprite - 1) << 1) - delta;
+	}else{
+		ram += delta;
+	}
+		
+	table1 = *ram;
+	table2 = *(ram + 1);
+
+	if (CheckBit(attr, 5)){
+		sprite = 0;
+		delta = 1;
+	}else{
+		sprite = 7;
+		delta = -1;
+	}
+	
+	priority &= attr;
+	
+	for (int j = 0; j < 8; ++j){
+		img[j] = CheckBitFF(table1, sprite) & 0x02;
+		img[j] |= CheckBitFF(table2, sprite) & 0x04;
+		if (img[j] == 0){
+			img[j] = 0xc0;
+		}else{
+			img[j] = (palette >> img[j]) & 0x03;
+			img[j] |= priority;
+		}
+		img[j] |= temp;
+		sprite += delta;
+	}
+}
+
+
+Graphics::Graphics(char *vRam, char *ioReg, char *OAM, char ***palette){
 	ram = vRam;
 	IF = &ioReg[0x0f];
 	lcdc = &ioReg[0x40];
@@ -12,9 +57,12 @@ Graphics::Graphics(char *vRam, char *ioReg, char *OAM){
 	lyc = &ioReg[0x45];
 	wy = &ioReg[0x4a];
 	wx = &ioReg[0x4b];
-	bgp = &ioReg[0x47];
-	obp = &ioReg[0x48];
-	*stat = 0xff;
+
+	bgp = cgbFlg;
+	obp = cgbFlg;
+	
+	palette[0] = &bgp;
+	palette[1] = &obp;
 	
 	oam = OAM;
 	for (int i = 0; i < 10; ++i){
@@ -33,34 +81,28 @@ ushort Graphics::Pos2Tile(){
 }
 
 void Graphics::Tile2Img(ushort tileID, ushort y, char *img){
-	ushort addr;
-	char table1, table2;
+	ushort addr, temp;
 	
 	addr = static_cast<ushort>(*lcdc & 0x10) << 7;
 	addr ^= 0x0800;
-	y += addr;
-	addr ^= C2US(ram[tileID]) << 4;
-	addr += y;
+	temp = addr ^ (C2US(ram[tileID]) << 4);
+	addr += temp;
 	
-	table1 = ram[addr];
-	table2 = ram[addr + 0x01];
+	tileID |= 0x2000;
 	
-	for (int j = 0; j < 8; ++j){
-		img[j] = CheckBitFF(table1, 7 - j) & 0x02;
-		img[j] |= CheckBitFF(table2, 7 - j) & 0x04;
-		img[j] = (*bgp >> img[j]) & 0x03;
-	}
+	Image(img, &ram[addr], ram[tileID] & cgbFlg[1], *bgp, 0x28, static_cast<int>(y), *lcdc << 7);
+
 }
 
 int Graphics::SpriteSearch(int x, int line, int num){
 	int delta, addr;
-	char table1, table2;
+	char temp;
 	x <<= 3;
 	for (int i = 0; i < 2; ++i){
 		if (num >= 10){
 			return num;
 		}
-		delta = (static_cast<int>(oam[x]) & 0xff) -16;
+		delta = (static_cast<int>(oam[x]) & 0xff) - 16;
 		delta = line - delta;
 		if ((delta >= 0) && (delta < spriteSize)){
 			++x;
@@ -70,31 +112,10 @@ int Graphics::SpriteSearch(int x, int line, int num){
 			addr &= 0x0fff ^ spriteSize;
 			++x;
 			
-			sprite[num].palette = obp[CheckBitFF(oam[x], 4) & 0x01];
-			sprite[num].priority = CheckBit(oam[x], 7);
+			temp = oam[x] & cgbFlg[1];
 			
-			if (CheckBit(oam[x], 6)){
-				addr += (spriteSize - 1 - delta) << 1;
-			}else{
-				addr += delta << 1;
-			}
-		
-			table1 = ram[addr];
-			table2 = ram[addr + 0x01];
+			Image(sprite[num].img, &ram[addr], temp, obp[CheckBitFF(temp, 4) & 0x01], spriteSize, delta << 1, *lcdc << 7);
 
-			if (CheckBit(oam[x], 5)){
-				addr = 0;
-				delta = 1;
-			}else{
-				addr = 7;
-				delta = -1;
-			}
-
-			for (int j = 0; j < 8; ++j){
-				sprite[num].img[j] = CheckBitFF(table1, addr) & 0x02;
-				sprite[num].img[j] |= CheckBitFF(table2, addr) & 0x04;
-				addr += delta;
-			}
 			++x;
 			++num;
 		}else{
@@ -127,7 +148,7 @@ void Graphics::Sequence(char *img){
 		
 	line = static_cast<int>(*ly) & 0xff;
 	
-	 if (CheckBit(*lcdc, 0)){
+	 if (CheckBit(*lcdc, 0) | CheckBit(cgbFlg[0], 7)){
 	 	BgDrow = &Graphics::Tile2Img;
 	 }else{
 	 	BgDrow = &Graphics::NoDrow;
@@ -200,20 +221,17 @@ void Graphics::Sequence(char *img){
 		/*Tile2Img*/(this->*BgDrow)(tileID, y, img);
 		++i;
 	}
-	char bg = (*bgp & 0x03);
+	char *bg;
 	for (i = 9; i >= 0; --i){
 		if (sprite[i].x < 168){
-			if (!sprite[i].priority){
-				for (int j = 0; j < 8; ++j){
-					if (sprite[i].img[j] != 0){
-						temp[sprite[i].x + j] = (sprite[i].palette >> sprite[i].img[j]) & 0x03;
-					}
-				}
-			}else{
-				for (int j = 0; j < 8; ++j){
-					if ((sprite[i].img[j] != 0) && (temp[sprite[i].x + j] == bg)){
-						temp[sprite[i].x + j] = (sprite[i].palette >> sprite[i].img[j]) & 0x03;
-					}
+			for (int j = 0; j < 8; ++j){
+				bg = &temp[sprite[i].x + j];
+				if (CheckBit(sprite[i].img[j], 6)){
+				}else if ((*bg & 0xc0) == 0xc0){
+					*bg = sprite[i].img[j];
+				}else if (CheckBit(*bg, 7)){
+				}else if (!CheckBit(sprite[i].img[j], 7)){
+					*bg = sprite[i].img[j];
 				}
 			}
 			sprite[i].x = 0xff;
@@ -241,6 +259,7 @@ void Graphics::NextLine(char num){
 		}
 		preIFlg = iFlg;
 	}
+	*stat |= 0x80;
 }
 
 void Graphics::Mode0(){
@@ -250,10 +269,11 @@ void Graphics::Mode0(){
 		*IF = 0x02;
 	}else{
 		preIFlg = false;
-	}	
+	}
+	*stat |= 0x80;
 }
 
 void Graphics::Mode3(){
-	*stat |= 0x03;
+	*stat |= 0x83;
 	preIFlg = false;
 }

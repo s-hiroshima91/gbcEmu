@@ -16,7 +16,7 @@ Game::Game(std::string romName, SDL_Renderer *render, SDL_Window *window)
 	
 	cartridge = new Cartridge(romName);
 	cpu = new Cpu(cartridge);
-	graphics = new Graphics(cpu->vRam, cpu->ioReg, cpu->oam);
+	graphics = new Graphics(cpu->vRam, cpu->ioReg, cpu->oam, cpu->palette);
 	controller = new Controller(renderer, window);
 	
 	label = new Label(romName, renderer, winX * magni, posY >> 1);
@@ -36,7 +36,7 @@ Game::Game(std::string romName, SDL_Renderer *render, SDL_Window *window)
 	controller->Drow(renderer);
 	SDL_SetRenderTarget(renderer, NULL);
 	
-	SDL_Delay(1000);
+	SDL_Delay(500);
 	SDL_Event event;
 	while( SDL_PollEvent(&event)){
 	}
@@ -45,7 +45,8 @@ Game::Game(std::string romName, SDL_Renderer *render, SDL_Window *window)
 
 void Game::Play(){
 
-	int skipFlg = 1;		std::chrono::high_resolution_clock::time_point start, end;
+	int skipFlg = 1;
+		std::chrono::high_resolution_clock::time_point start, end;
 	
 	int quitFlg = 0;
 	int timeStep = 0;
@@ -61,11 +62,21 @@ void Game::Play(){
 	}
 	
 	while(quitFlg == 0){
+		
+		while(!CheckBit(cpu->ioReg[0x40], 7) && (quitFlg != 0)){
+			graphics->Mode0();
+			cpu->ioReg[0x44] = 0x00;
+			counter = 0;
+			counter += cpu->HDMA();
+			counter = cpu->Sequence();
+			controller->Click(&quitFlg, cpu->key);
+			timeStep = 0;
+		}
+		
 		start = std::chrono::high_resolution_clock::now();
 		controller->Click(&quitFlg, cpu->key);
-		skipFlg |= 0x80 ^ (cpu->ioReg[0x40] &0x80);
 
-		if (skipFlg > 16){
+		if (skipFlg != 0){
 			Sequence(&Graphics::Dummy, &Game::Dummy);
 
 		}else{
@@ -77,7 +88,7 @@ void Game::Play(){
 
 		if ((quitFlg & 0x80) == 0x80){
 			if (cpu->ioReg[0x50] != 0){
-				cartridge->WriteSaveDate(cpu->sRam);
+				cartridge->WriteSaveDate();
 			}
 			quitFlg &= 0x7f;
 		}
@@ -90,24 +101,28 @@ void Game::Play(){
 			timeStep = 0;
 		}else{
 			timeStep -= 16;
-			timeStep &=0x7f;
+			timeStep &=0xff;
 		}
 		skipFlg = timeStep;
 	}
-	
 }
 
 void Game::Drow(int line){
-	int bg, num;
+	int bgR, bgG, bgB, num;
 
-	bg = cpu->ioReg[0x47] & 0x03;
-	SDL_SetRenderDrawColor(renderer, color[bg], color[bg + 4], color[bg + 8], SDL_ALPHA_OPAQUE);
+	num = static_cast<int>(cpu->ioReg[0x47] & 0x03) | 0x20;
+	
+	bgR = cpu->colorR[num];
+	bgG = cpu->colorG[num];
+	bgB = cpu->colorB[num];
+
+	SDL_SetRenderDrawColor(renderer, bgR, bgG, bgB, SDL_ALPHA_OPAQUE);
 	SDL_RenderDrawLine(renderer, 0, line, winX, line);
 		
 	for (int j = 0; j < winX; ++j){
-		num = static_cast<int>(img[j + 8]);
-		if (num != bg){
-			SDL_SetRenderDrawColor(renderer, color[num], color[num + 4], color[num + 8], SDL_ALPHA_OPAQUE);
+		num = static_cast<int>(img[j + 8] & 0x3f);
+		if ((cpu->colorR[num] != bgR) || (cpu->colorG[num] != bgG) || (cpu->colorB[num] != bgB)){
+			SDL_SetRenderDrawColor(renderer, cpu->colorR[num], cpu->colorG[num], cpu->colorB[num], SDL_ALPHA_OPAQUE);
 			SDL_RenderDrawPoint(renderer, j, line);
 		}
 	}
@@ -138,6 +153,8 @@ void Game::Sequence(void (Graphics::*Graphics)(char*), void (Game::*Drow)(int)){
 		counter -= 172;
 		
 		graphics->Mode0();
+//		counter += cpu->Sequence();
+		counter += cpu->HDMA();
 		while(counter < 204){
 			counter += cpu->Sequence();
 		}
@@ -149,7 +166,7 @@ void Game::Sequence(void (Graphics::*Graphics)(char*), void (Game::*Drow)(int)){
 	for (int i = 0; i < 10; ++i){
 		graphics->NextLine(1);
 		while(counter < 456){
-			counter += cpu->Sequence();			
+			counter += cpu->Sequence();
 		}
 		counter -= 456;
 	}
