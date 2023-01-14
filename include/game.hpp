@@ -15,9 +15,6 @@ class Game{
 	private:
 	int counter = 0;
 	char img[winX + 17];
-	int color[12] = {0xff, 0xc0, 0x80, 0x00,
-							0xff, 0xc0, 0x80, 0x00,
-							0xff, 0xc0, 0x80, 0x00};
 	SDL_Rect rect = {posX, posY, winX * magni, winY * magni};
 	
 	Cartridge *cartridge;

@@ -5,7 +5,7 @@
 class Cartridge;
 
 class Cpu{
-	private:
+	public:
 		Cartridge *Crg;
 		char registerA, registerB, registerC, registerD, registerE, registerF;
 		ushort registerHL, registerSP, registerPC;
@@ -19,14 +19,20 @@ class Cpu{
 		
 		ushort clockCounter = 0;
 		
-		char *wRam1, *wRam2;
+		char *wRam1, *wRam2, *wRamBank;
 		
-
+		ushort hdmaS = 0;
+		ushort hdmaT = 0x8000;
+		ushort hdma = 0xfff;
+		
+		int doubleSpeed = 0;
 	
 		char *MemoryMap(ushort addr);
 		int Interrupt();
 		void Timer();
 		void BootFin();
+		void Palette(char value, ushort addr, char *palette);
+		
 		
 		
 		char Imm();
@@ -56,9 +62,9 @@ class Cpu{
 		
 		void LdR88Imm(char *registerX, char *registerY);
 		void LdR16Imm(ushort *registerXY);
-		void StX(ushort addr, char value);
+		int StX(ushort addr, char value);
 		void StX16(ushort addr, ushort value);
-		void IOReg(ushort addr, char value);
+		int IOReg(ushort addr, char value);
 		
 		void Pop88(char *registerX, char *registerY);
 		void Push88(char registerX, char registerY);
@@ -73,14 +79,23 @@ class Cpu{
 	public:
 		bool ime;
 		char key[2] = {0x3f, 0x3f};
-		char *rom1, *rom2, *vRam, *sRam, etcRam[0x2000];
+		char *rom1, *rom2, *vRam, *vRamColor, *sRam, etcRam[0x2000] = {};
 		char &IF = etcRam[0x1f0f];
 		char &IE = etcRam[0x1fff];
 		char *ioReg = &etcRam[0x1f00];
 		char *oam  = &etcRam[0x1e00];
 		
+		char bgPalette[0x40] = {};
+		char spritePalette[0x40] = {};
+		char colorR[0x40];
+		char colorG[0x40];
+		char colorB[0x40];
+		
+		char **palette[2];
+		
 		Cpu(Cartridge *cartridge);
 		int Sequence();
+		int HDMA();
 		~Cpu();
 	
 	

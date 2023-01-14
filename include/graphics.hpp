@@ -7,7 +7,6 @@ struct sprite{
 	int  x;
 	char img[8];
 	char palette;
-	bool priority;
 };
 
 class Graphics{
@@ -26,8 +25,9 @@ class Graphics{
 	
 	public:
 	ushort windowCounter;
+	char cgbFlg[2] = {0xe4, 0xef};
 	
-	Graphics(char *vRam, char *ioReg, char *OAM);
+	Graphics(char *vRam, char *ioReg, char *OAM, char ***palette);
 	void Dummy(char *dummy);
 	void Sequence(char *img);
 	void NextLine(char num);
